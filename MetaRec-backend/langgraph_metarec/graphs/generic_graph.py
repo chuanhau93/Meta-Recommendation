@@ -10,6 +10,7 @@ from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional, Set
 from langgraph.graph import END, START, StateGraph
 
 from langgraph_metarec.genres import detect_genres_in_text
+from langgraph_metarec.product_constraints import apply_hard_constraints, resolve_constraints
 from langgraph_metarec.tool_registry import DEFAULT_TOOL_REGISTRY, ToolRegistry
 
 
@@ -43,6 +44,7 @@ class GenericRuntimeState(TypedDict, total=False):
     errors: List[str]
     gather_iterations: int
     candidate_count: int
+    constraint_filter: Optional[Dict[str, Any]]
 
 
 @dataclass
@@ -896,7 +898,19 @@ def build_generic_domain_graph(
                     errors.append(str(execution["error"]))
                 continue
             items.extend(normalize_tool_items(str(execution.get("tool")), execution.get("output"), domain))
-        state["items"] = _rank_items(items)[:10]
+
+        ranked = _rank_items(items)
+        if domain == "product":
+            constraints = resolve_constraints(state.get("query", ""), state.get("preferences", {}))
+            outcome = apply_hard_constraints(ranked, constraints)
+            state["constraint_filter"] = outcome.to_metadata()
+            ranked = outcome.kept
+            if outcome.exhausted:
+                errors.append(
+                    "No products matched the stated hard constraints "
+                    "(e.g. every candidate was over budget)."
+                )
+        state["items"] = ranked[:10]
         state["errors"] = errors
         await _emit(
             state,
@@ -923,6 +937,7 @@ def build_generic_domain_graph(
             "items_count": len(state.get("items", [])),
             "gather_iterations": state.get("gather_iterations", 0),
             "candidate_count": state.get("candidate_count", 0),
+            "constraint_filter": state.get("constraint_filter"),
         }
         await _emit(
             state,

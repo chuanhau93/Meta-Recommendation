@@ -1,35 +1,65 @@
-"""WP4 Phase 0 baseline, pinned as tests.
+"""WP4 acceptance tests — the hard-constraint filter, exercised through the
+real graph over the labeled dataset.
 
-- ``test_harness_runs`` keeps the eval wired up as the dataset grows.
-- ``test_no_hard_constraint_violations_surface`` is the WP4 acceptance target.
-  It is ``xfail(strict)`` today because B0 has no constraint filter; when the
-  Phase 1 filter lands this turns into an unexpected pass and the marker must be
-  removed. That flip is the signal Phase 1 is done.
+History: B0 (no filter) surfaced 52/52 labeled violators — see the
+`python -m tests.wp4.eval_constraints --baseline` run and the project log.
 """
 
 import pytest
 
+from langgraph_metarec.graphs.generic_graph import normalize_tool_items
+from langgraph_metarec.product_constraints import violations
+from tests.wp4.dataset import load_cases
 from tests.wp4.eval_constraints import evaluate
 
 
 @pytest.mark.backend_unit
-def test_harness_runs():
-    report = evaluate()
-    assert report.cases, "no cases evaluated"
-    assert report.total_pool_violators > 0, "dataset has no labeled violators to detect"
-    for case in report.cases:
-        assert case.surfaced_titles, f"{case.id}: graph surfaced nothing"
-        assert not case.label_checker_disagreements, (
-            f"{case.id}: constraints.violations() disagrees with human labels:\n  "
-            + "\n  ".join(case.label_checker_disagreements)
-        )
+def test_labels_match_checker():
+    """Keep `violations()` honest against human judgment: for every labeled
+    candidate, the checker's verdict (violates / doesn't) must agree with the
+    hand label. Runs directly on the normalized pool, no graph."""
+    cases = load_cases()
+    assert cases, "no cases"
+    assert sum(len(c.pool_violator_titles) for c in cases) > 0, "dataset has no labeled violators"
+    disagreements = []
+    for case in cases:
+        normalized = normalize_tool_items("amazon.product.search", case.pool, "product")
+        labels = case.labels_by_title()
+        for item in normalized:
+            human = labels.get(item["title"], [])
+            checker = violations(item, case.hard_constraints)
+            if bool(human) != bool(checker):
+                disagreements.append(f"{case.id} / {item['title'][:60]!r}: label={human} checker={checker}")
+    assert not disagreements, "checker vs label drift:\n  " + "\n  ".join(disagreements)
 
 
 @pytest.mark.backend_unit
-@pytest.mark.xfail(strict=True, reason="B0 has no hard-constraint filter; Phase 1 target")
-def test_no_hard_constraint_violations_surface():
+def test_no_hard_constraint_violation_is_surfaced():
+    """The WP4 acceptance target: with the filter on, zero labeled violators reach the user."""
     report = evaluate()
     assert report.total_leaked == 0, (
         f"{report.total_leaked}/{report.total_pool_violators} violating items still surfaced\n\n"
         + report.render()
     )
+
+
+@pytest.mark.backend_unit
+def test_filter_does_not_drop_compliant_items():
+    """It must not over-prune: every case that has compliant candidates still
+    shows them (capped at the graph's top-10)."""
+    report = evaluate()
+    assert report.false_drops == 0, (
+        f"{report.false_drops} compliant items were dropped by the filter\n\n" + report.render()
+    )
+
+
+@pytest.mark.backend_unit
+def test_all_violating_pool_returns_empty_not_violations():
+    """Cases where no candidate satisfies the constraints (09 ssd, 13 laptop):
+    the filter must return empty + an explanation, never fall back to violations."""
+    report = evaluate()
+    all_violating = [c for c in report.cases if c.compliant_available == 0]
+    assert all_violating, "expected at least one all-violating case in the dataset"
+    for case in all_violating:
+        assert case.surfaced_titles == [], f"{case.id}: surfaced items despite no compliant candidate"
+        assert (case.constraint_filter or {}).get("exhausted") is True, f"{case.id}: not flagged exhausted"

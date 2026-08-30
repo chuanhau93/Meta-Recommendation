@@ -131,10 +131,51 @@ cases.
 
 ## Phase 0 — DONE
 
-15 cases, harness + `xfail(strict)` acceptance test committed. Baseline = 100%
-leak. Next: Phase 1 hard-constraint filter (make `test_no_hard_constraint_
-violations_surface` pass), then re-run `python -m tests.wp4.eval_constraints`.
+15 cases (12 leaky + 3 clean controls), harness + acceptance tests committed.
+B0 baseline = 100% leak (52/52). `python -m tests.wp4.eval_constraints --baseline`
+reproduces it.
 
-**NEXT:** grow the dataset to ~15 cases across budget / category / brand-include
-/ brand-exclude / compatibility / attribute, then re-baseline before writing the
-filter.
+---
+
+## Phase 1 — hard-constraint filter — 31 Aug 2026
+
+New module `langgraph_metarec/product_constraints.py` (Phase 0's
+`tests/wp4/constraints.py` moved here and extended):
+
+- `ProductConstraints` + `violations(item, c)` — the checker.
+- `resolve_constraints(query, preferences)` — explicit
+  `preferences["hard_constraints"]` dict wins (extraction step / tests);
+  otherwise `derive_constraints()` builds a conservative set from the loose
+  fields + a small attribute vocabulary in the query text.
+- `apply_hard_constraints(items, c)` → `FilterOutcome{kept, dropped, relaxed,
+  exhausted}`. Drops violators; if nothing survives, relaxes the non-budget
+  constraints one rung at a time (`attributes → exclusions → category →
+  brand`); **budget is never auto-relaxed** — an all-over-budget pool returns
+  empty + `exhausted`.
+
+Wired into `generic_graph.normalize_and_rank`: for `domain == "product"`,
+filter the ranked candidates before the top-10 cut; record the outcome in
+`metadata["constraint_filter"]`; append an "explained empty" error when
+exhausted.
+
+**Results — `python -m tests.wp4.eval_constraints`:**
+
+| | B0 (no filter) | B1 (filter on) |
+|---|---|---|
+| hard-constraint violators surfaced | **52 / 52 (100%)** | **0 / 52 (0%)** |
+| compliant items dropped by mistake | — | **0 / 94** |
+| all-over-budget cases (09, 13) | 20 violations shown | empty + "nothing within budget" |
+
+Tests: `tests/test_product_constraints.py` (21 unit tests for the filter in
+isolation) + `tests/wp4/test_wp4_baseline.py` (4 acceptance tests through the
+real graph: no leak, no false drops, all-violating → empty, label/checker
+consistency). Full `backend_unit` suite: 607 passed.
+
+**Not yet done (Phase 1b / Phase 2):**
+- Production has no extraction step, so `resolve_constraints` currently always
+  falls to `derive_constraints`. The `hard_constraints` key is populated only by
+  the eval. Phase 1b: LLM/rule extraction in the orchestrator or a graph node.
+- Price-missing items (~1 in 10) are treated as "unknown → allowed". Decide:
+  hide, or surface flagged.
+- Exhausted cases return empty. Phase 2 could show nearest-miss items
+  ("nothing under $500; here are the closest") instead.

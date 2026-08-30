@@ -10,11 +10,11 @@ the graph.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List
 
-from tests.wp4.constraints import HardConstraints
+from langgraph_metarec.product_constraints import ProductConstraints
 
 CASES_DIR = Path(__file__).parent / "cases"
 
@@ -28,10 +28,17 @@ class Case:
     id: str
     query: str
     preferences: Dict[str, Any]
-    hard_constraints: HardConstraints
+    hard_constraints: ProductConstraints
     candidates: List[Dict[str, Any]]
     soft_constraints: List[str] = field(default_factory=list)
     notes: str = ""
+
+    @property
+    def preferences_with_constraints(self) -> Dict[str, Any]:
+        """Preferences as they reach the graph, plus the ground-truth structured
+        constraints under ``hard_constraints`` — i.e. what a perfect extraction
+        step would hand the filter. Phase 1 tests the filter, not extraction."""
+        return {**self.preferences, "hard_constraints": asdict(self.hard_constraints)}
 
     @property
     def pool(self) -> List[Dict[str, Any]]:
@@ -52,7 +59,7 @@ def load_case(path: Path) -> Case:
         id=data.get("id", path.stem),
         query=data["query"],
         preferences=data.get("preferences", {}),
-        hard_constraints=HardConstraints.from_dict(data.get("hard_constraints", {})),
+        hard_constraints=ProductConstraints.from_dict(data.get("hard_constraints", {})),
         candidates=data["candidates"],
         soft_constraints=data.get("soft_constraints", []),
         notes=data.get("notes", ""),
