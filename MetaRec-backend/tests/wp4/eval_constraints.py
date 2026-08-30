@@ -139,21 +139,22 @@ class Report:
         return sum(1 for c in self.cases if c.top3_violation)
 
     def render(self) -> str:
+        width = 63
         lines = [
             "WP4 Phase 0 - baseline hard-constraint leak report",
-            "=" * 60,
-            f"{'case':<22}{'pool_viol':>10}{'leaked':>8}{'first_rank':>12}{'top3':>6}",
-            "-" * 60,
+            "=" * width,
+            f"{'case':<27}{'pool_viol':>10}{'leaked':>8}{'first_rank':>12}{'top3':>6}",
+            "-" * width,
         ]
         for c in self.cases:
             lines.append(
-                f"{c.id:<22}{c.pool_violators:>10}{c.leaked:>8}"
+                f"{c.id:<27}{c.pool_violators:>10}{c.leaked:>8}"
                 f"{(c.first_violator_rank if c.first_violator_rank else '-'):>12}"
                 f"{('YES' if c.top3_violation else '-'):>6}"
             )
         lines += [
-            "-" * 60,
-            f"{'TOTAL':<22}{self.total_pool_violators:>10}{self.total_leaked:>8}",
+            "-" * width,
+            f"{'TOTAL':<27}{self.total_pool_violators:>10}{self.total_leaked:>8}",
             "",
             f"leak rate (violating items surfaced / present): {self.leak_rate:.0%}",
             f"cases with a violator in the top 3:             {self.cases_with_top3_violation}/{len(self.cases)}",

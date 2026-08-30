@@ -66,22 +66,32 @@ how many hard-constraint-violating items survive to `result.items`.
 runs the query against the **live** SerpApi adapter and writes a case skeleton;
 fill `hard_constraints` and label every `expect_violations` by hand.
 
-**B0 numbers (dataset still growing):**
+**B0 numbers — 15 cases (12 with violators + 3 clean controls), 31 Aug 2026:**
 
-| case | kind | pool violators | surfaced (leak) | first violator rank |
+| case | kind | pool violators | leaked | first violator rank |
 |---|---|---|---|---|
-| case_01_keyboard | transcribed | 3 | 3 (100%) | 3 — top 3 |
-| case_02_keyboard_live | SerpApi | 3 | 3 (100%) | 4 |
-| case_03_mouse | clean control | 0 | — | — |
-| case_04_headphones | clean control | 0 | — | — |
-| case_05_sony_headphones | SerpApi, brand + budget | 3 | 3 (100%) | 6 |
-| case_06_monitor | SerpApi, tight budget | 7 | 7 (100%) | 1 — top 3 |
-| case_07_earbuds | SerpApi, brand-exclude + wireless | 2 | 2 (100%) | 1 — top 3 |
-| case_08_keyboard_tight | clean control | 0 | — | — |
-| **total** | | **18** | **18 (100%)** | — |
+| case_01_keyboard | transcribed, budget + category | 3 | 3 | 3 — top 3 |
+| case_02_keyboard_live | budget + category | 3 | 3 | 4 |
+| case_03_mouse | clean control (loose budget) | 0 | — | — |
+| case_04_headphones | clean control (loose budget) | 0 | — | — |
+| case_05_sony_headphones | brand + budget + wired | 3 | 3 | 6 |
+| case_06_monitor | tight budget | 7 | 7 | 1 — top 3 |
+| case_07_earbuds | brand-exclude + wireless + budget | 2 | 2 | 1 — top 3 |
+| case_08_keyboard_tight | clean control ("tight" ≠ below floor) | 0 | — | — |
+| case_09_ssd | budget + category — **all 10 violate** | 10 | 10 | 1 — top 3 |
+| case_10_standing_desk | tight budget | 6 | 6 | 2 — top 3 |
+| case_11_speaker | compound: budget + attribute | 3 | 3 | 7 |
+| case_12_webcam | brand-include + budget | 2 | 2 | 2 — top 3 |
+| case_13_gaming_laptop | budget + GPU — **all 10 violate** | 10 | 10 | 1 — top 3 |
+| case_14_espresso | budget | 2 | 2 | 1 — top 3 |
+| case_15_studio_headphones | budget (1 over) | 1 | 1 | 1 — top 3 |
+| **TOTAL** | | **52** | **52 (100%)** | — |
 
-3 of 8 cases put a violator at **rank 1** or in the top 3. B0 leak rate on
-labelled violators is **100%** — there is no filter, so nothing else is possible.
+**B0 leak rate on labelled hard-constraint violators: 100% (52/52).** There is
+no filter anywhere, so every violating item present in the candidate pool is
+surfaced. **9 of 15 cases put a violator in the top 3**; 6 put one at rank 1.
+Cases 09 and 13 have no compliant candidate at all — Phase 1 must relax or say
+"nothing matched", not silently show violations.
 
 `_item_score` sorts by (rating, reviews, popularity, title), so a well-reviewed
 over-budget item (K100 AIR $186; Logitech MX Mechanical $153 / 2.2k reviews;
@@ -108,7 +118,22 @@ cases.
 - SerpApi amazon frequently returns `brand: null`; don't rely on it for the
   brand constraint — fall back to title.
 - `price` is a display string (`"$129.99"`, sometimes a `"$x - $y"` range) —
-  needs parsing; there is no `extracted_price` passthrough.
+  needs parsing; there is no `extracted_price` passthrough. ~1 in 10 results
+  has **no price at all** (cases 05, 11) — policy decision needed: hide, or
+  show flagged as "price unavailable".
+- The current product `PreferenceSpec` (preference_specs.py) is 6 free-text
+  fields. Phase 1 needs structured extraction: `budget_range {max, currency}`,
+  `category`, `brand_in` / `brand_not_in`, `required_attributes`.
+- Filter belongs in `generic_graph.normalize_and_rank`, right before
+  `state["items"] = _rank_items(items)[:10]` (~line 899). `constraints.violations()`
+  is the checker; keep the pre-filter candidate list so the relax path can fall
+  back to it.
+
+## Phase 0 — DONE
+
+15 cases, harness + `xfail(strict)` acceptance test committed. Baseline = 100%
+leak. Next: Phase 1 hard-constraint filter (make `test_no_hard_constraint_
+violations_surface` pass), then re-run `python -m tests.wp4.eval_constraints`.
 
 **NEXT:** grow the dataset to ~15 cases across budget / category / brand-include
 / brand-exclude / compatibility / attribute, then re-baseline before writing the
