@@ -895,6 +895,9 @@ def build_generic_domain_graph(
                 if execution.get("error"):
                     errors.append(str(execution["error"]))
                 continue
+            if execution.get("tool") == "amazon.product.search" and execution.get("output"):
+                print("=== RAW AMAZON ITEM ===", flush=True)
+                print(execution["output"][0], flush=True)
             items.extend(normalize_tool_items(str(execution.get("tool")), execution.get("output"), domain))
         state["items"] = _rank_items(items)[:10]
         state["errors"] = errors

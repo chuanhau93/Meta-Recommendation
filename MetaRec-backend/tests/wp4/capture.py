@@ -88,7 +88,7 @@ def main() -> None:
     text = json.dumps(skeleton, indent=2, ensure_ascii=False)
 
     if args.out:
-        args.out.write_text(text + "\n", encoding="utf-8")
+        args.out.write_text(text + "\n", encoding="utf-8", newline="\n")
         print(f"wrote {args.out}", file=sys.stderr)
     else:
         print(text)
