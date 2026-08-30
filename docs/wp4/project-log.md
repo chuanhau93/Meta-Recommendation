@@ -74,8 +74,14 @@ fill `hard_constraints` and label every `expect_violations` by hand.
 | case_02_keyboard_live | SerpApi | 3 | 3 (100%) | 4 |
 | case_03_mouse | clean control | 0 | — | — |
 | case_04_headphones | clean control | 0 | — | — |
-| case_05_sony_headphones | SerpApi, brand+budget | 3 | 3 (100%) | 6 |
-| **total** | | **9** | **9 (100%)** | — |
+| case_05_sony_headphones | SerpApi, brand + budget | 3 | 3 (100%) | 6 |
+| case_06_monitor | SerpApi, tight budget | 7 | 7 (100%) | 1 — top 3 |
+| case_07_earbuds | SerpApi, brand-exclude + wireless | 2 | 2 (100%) | 1 — top 3 |
+| case_08_keyboard_tight | clean control | 0 | — | — |
+| **total** | | **18** | **18 (100%)** | — |
+
+3 of 8 cases put a violator at **rank 1** or in the top 3. B0 leak rate on
+labelled violators is **100%** — there is no filter, so nothing else is possible.
 
 `_item_score` sorts by (rating, reviews, popularity, title), so a well-reviewed
 over-budget item (K100 AIR $186; Logitech MX Mechanical $153 / 2.2k reviews;
