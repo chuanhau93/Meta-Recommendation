@@ -42,3 +42,48 @@ category and price constraints are silently ignored.
 
 **NEXT STEP:** use this exact query + result set as a labeled test case when
 building the hard-constraint filter (Phase 1 of M2).
+
+---
+
+## Phase 0 — baseline leak harness — 30 Aug 2026
+
+Built `MetaRec-backend/tests/wp4/` — a labeled-dataset harness that feeds a
+hand-labeled candidate pool through the real graph
+(`run_generic_domain_graph`, fake `amazon.product.search` adapter) and counts
+how many hard-constraint-violating items survive to `result.items`.
+
+- `constraints.py` — `HardConstraints` model + `violations(item, hc)` checker
+  (price parse, category include/exclude, brand in/not-in, require/exclude
+  terms). Reused as the Phase 1 filter core.
+- `dataset.py` / `cases/*.json` — one case per query; each candidate carries
+  `expect_violations` (human ground truth).
+- `eval_constraints.py` — `python -m tests.wp4.eval_constraints` prints the
+  leak report. `test_wp4_baseline.py` pins it: `test_harness_runs` (always on)
+  + `test_no_hard_constraint_violations_surface` (`xfail(strict)`, the WP4
+  acceptance target — flips to pass when Phase 1 lands).
+
+**B0 numbers (case_01_keyboard only, dataset still growing):**
+
+| metric | value |
+|---|---|
+| labeled violators in pool | 3 |
+| violators surfaced by B0 | 3 (100% leak) |
+| first violator rank | 3 (in the top 3) |
+
+Rank-3 leak is the $186 K100 AIR: `_item_score` sorts by (rating, reviews,
+popularity, title), so a well-reviewed 55%-over-budget item outranks 3 of the 4
+compliant options.
+
+**Findings for Phase 1:**
+- `_amazon_product_search_adapter` (tool_registry.py) captures only
+  `title, brand, link, rating, reviews, price, thumbnail` — **no category
+  field**. Category constraints can only be enforced from the title today;
+  either add a category/`type` passthrough or accept title-substring matching.
+- SerpApi amazon frequently returns `brand: null`; don't rely on it for the
+  brand constraint — fall back to title.
+- `price` is a display string (`"$129.99"`, sometimes a `"$x - $y"` range) —
+  needs parsing; there is no `extracted_price` passthrough.
+
+**NEXT:** grow the dataset to ~15 cases across budget / category / brand-include
+/ brand-exclude / compatibility / attribute, then re-baseline before writing the
+filter.
