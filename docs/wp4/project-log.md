@@ -1,6 +1,9 @@
 # FYP Project Log — Ong Chuan Hau — WP4: Constraint-aware Product Recommendation
 
 Proposal: https://github.com/Hanny658/FYP26-Proposals/tree/main/WP4-product-recommendation
+D0 interim report: [`D0-interim-report.md`](D0-interim-report.md) — pipeline trace, B0 repro, ID/price/field/feedback audit, freeze list.
+
+This file is the running work log; `D0-interim-report.md` is the deliverable.
 
 **Models:** B0 = existing generic order (`_item_score`). B1 = classical BM25 +
 calibrated popularity (+ CF) — *not started*. M2 = constraint-aware hybrid: hard
