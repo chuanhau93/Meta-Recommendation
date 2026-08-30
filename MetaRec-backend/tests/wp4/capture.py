@@ -23,6 +23,12 @@ _BACKEND_DIR = Path(__file__).resolve().parents[2]
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
+for _stream in (sys.stdout, sys.stderr):  # product titles carry non-cp1252 chars
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
 from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv(_BACKEND_DIR / ".env")
@@ -77,11 +83,17 @@ def main() -> None:
     parser.add_argument("query")
     parser.add_argument("--pref", action="append", default=[], metavar="KEY=VALUE")
     parser.add_argument("--out", type=Path, default=None)
+    parser.add_argument("--force", action="store_true", help="overwrite an existing --out file")
     args = parser.parse_args()
+
+    if args.out and args.out.exists() and not args.force:
+        parser.error(f"{args.out} exists; pass --force to overwrite (you will lose its labels)")
 
     preferences = dict(p.split("=", 1) for p in args.pref)
     raw = asyncio.run(_capture(args.query, preferences))
     print(f"captured {len(raw)} candidates", file=sys.stderr)
+    if not raw:
+        parser.error("no candidates returned (SerpApi empty/errored) - nothing written; retry")
 
     case_id = args.out.stem if args.out else "case_live"
     skeleton = _skeleton(case_id, args.query, preferences, raw)

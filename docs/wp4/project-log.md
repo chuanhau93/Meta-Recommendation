@@ -68,15 +68,31 @@ fill `hard_constraints` and label every `expect_violations` by hand.
 
 **B0 numbers (dataset still growing):**
 
-| case | pool violators | surfaced (leak) | first violator rank |
-|---|---|---|---|
-| case_01_keyboard (transcribed) | 3 | 3 (100%) | 3 — top 3 |
-| case_02_keyboard_live (SerpApi) | 3 | 3 (100%) | 4 |
-| **total** | **6** | **6 (100%)** | — |
+| case | kind | pool violators | surfaced (leak) | first violator rank |
+|---|---|---|---|---|
+| case_01_keyboard | transcribed | 3 | 3 (100%) | 3 — top 3 |
+| case_02_keyboard_live | SerpApi | 3 | 3 (100%) | 4 |
+| case_03_mouse | clean control | 0 | — | — |
+| case_04_headphones | clean control | 0 | — | — |
+| case_05_sony_headphones | SerpApi, brand+budget | 3 | 3 (100%) | 6 |
+| **total** | | **9** | **9 (100%)** | — |
 
 `_item_score` sorts by (rating, reviews, popularity, title), so a well-reviewed
-over-budget item (K100 AIR at $186; Logitech MX Mechanical at $153 with 2.2k
-reviews) outranks compliant cheaper options. No filter anywhere = 100% leak.
+over-budget item (K100 AIR $186; Logitech MX Mechanical $153 / 2.2k reviews;
+Sony WH-1000XM5 $200) outranks compliant cheaper options. No filter anywhere =
+**every violator present in the pool is surfaced.**
+
+**Finding — when B0 leaks:** a *loose* single budget on a category with many
+cheap options (mouse < $50, headphones < $100) returns 10 compliant items on
+SerpApi relevance alone — 0 leak. Leak needs a **tight budget vs the category's
+price band**, a **brand** filter, a **category Amazon's text search ignores**,
+or a **compound** constraint. The dataset needs a majority of these.
+
+**Finding — brand is unreliable:** SerpApi returns `brand` for some amazon
+results and `null` for others in the same response. `constraints._brand()` only
+trusts a real brand string (never the price-filled `subtitle`); `brand_in` is a
+violation only when a *different* brand is positively readable. Hand-label brand
+cases.
 
 **Findings for Phase 1:**
 - `_amazon_product_search_adapter` (tool_registry.py) captures only

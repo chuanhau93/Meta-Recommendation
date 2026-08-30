@@ -82,8 +82,16 @@ def _item_text(item: Dict[str, Any]) -> str:
 
 
 def _brand(item: Dict[str, Any]) -> str:
+    """Known brand string, casefolded, or "" when the source didn't give one.
+
+    Deliberately does NOT fall back to `subtitle` — the amazon adapter fills
+    subtitle with the price when brand is missing, which would poison the check.
+    """
     raw = item.get("raw") if isinstance(item.get("raw"), dict) else {}
-    return str(raw.get("brand") or item.get("subtitle") or "").casefold()
+    brand = raw.get("brand")
+    if not brand and isinstance(item.get("subtitle"), str) and not _PRICE_NUM.search(item["subtitle"]):
+        brand = item["subtitle"]
+    return str(brand or "").strip().casefold()
 
 
 def violations(item: Dict[str, Any], hc: HardConstraints) -> List[str]:
@@ -105,7 +113,11 @@ def violations(item: Dict[str, Any], hc: HardConstraints) -> List[str]:
 
     if hc.brand_in:
         brand = _brand(item)
-        if brand and not any(b.casefold() in brand for b in hc.brand_in):
+        # Only a violation when we can positively read a *different* brand.
+        # Unknown brand -> benefit of the doubt (title may still name it).
+        if brand and not any(
+            b.casefold() in brand or b.casefold() in text for b in hc.brand_in
+        ):
             out.append("brand")
     if hc.brand_not_in:
         brand = _brand(item)

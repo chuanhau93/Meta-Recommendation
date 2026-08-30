@@ -26,6 +26,12 @@ _BACKEND_DIR = Path(__file__).resolve().parents[2]
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
 from langgraph_metarec.graphs.generic_graph import (  # noqa: E402
     GenericGraphAdapters,
     run_generic_domain_graph,
