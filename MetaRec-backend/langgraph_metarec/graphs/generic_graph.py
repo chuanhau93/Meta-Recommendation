@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import inspect
 import math
+import os
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional, Set, TypedDict
 
@@ -27,6 +28,16 @@ GatherReasoner = Callable[[Dict[str, Any]], Awaitable[Optional[Dict[str, Any]]]]
 # target on the seed pass and never invoke the reasoner (zero extra LLM cost).
 GATHER_TARGET = 8
 MAX_GATHER_ITERS = 3
+
+# WP4. Selects the product ranker: "b0" (default, pre-WP4 generic order),
+# "b1" (classical relevance+popularity, planned), "m2" (constraint-aware hybrid).
+# Only "m2" currently changes behaviour — it enables the hard-constraint filter.
+_PRODUCT_RANKERS = {"b0", "b1", "m2"}
+
+
+def _product_ranker() -> str:
+    value = os.getenv("METAREC_PRODUCT_RANKER", "b0").strip().lower()
+    return value if value in _PRODUCT_RANKERS else "b0"
 
 
 class GenericRuntimeState(TypedDict, total=False):
@@ -900,7 +911,10 @@ def build_generic_domain_graph(
             items.extend(normalize_tool_items(str(execution.get("tool")), execution.get("output"), domain))
 
         ranked = _rank_items(items)
-        if domain == "product":
+        # WP4: the constraint-aware path (M2) is gated by METAREC_PRODUCT_RANKER.
+        # Default "b0" leaves ordering byte-identical to the pre-WP4 baseline
+        # (acceptance criterion 1: feature-off == B0, no network needed).
+        if domain == "product" and _product_ranker() != "b0":
             constraints = resolve_constraints(state.get("query", ""), state.get("preferences", {}))
             outcome = apply_hard_constraints(ranked, constraints)
             state["constraint_filter"] = outcome.to_metadata()

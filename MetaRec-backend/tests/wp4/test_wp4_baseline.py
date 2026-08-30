@@ -5,12 +5,19 @@ History: B0 (no filter) surfaced 52/52 labeled violators — see the
 `python -m tests.wp4.eval_constraints --baseline` run and the project log.
 """
 
+import asyncio
+
 import pytest
 
-from langgraph_metarec.graphs.generic_graph import normalize_tool_items
+from langgraph_metarec.graphs.generic_graph import (
+    GenericGraphAdapters,
+    _rank_items,
+    normalize_tool_items,
+    run_generic_domain_graph,
+)
 from langgraph_metarec.product_constraints import violations
 from tests.wp4.dataset import load_cases
-from tests.wp4.eval_constraints import evaluate
+from tests.wp4.eval_constraints import PRODUCT_TAGS, _registry_returning, evaluate
 
 
 @pytest.mark.backend_unit
@@ -31,6 +38,34 @@ def test_labels_match_checker():
             if bool(human) != bool(checker):
                 disagreements.append(f"{case.id} / {item['title'][:60]!r}: label={human} checker={checker}")
     assert not disagreements, "checker vs label drift:\n  " + "\n  ".join(disagreements)
+
+
+@pytest.mark.backend_unit
+@pytest.mark.parametrize("flag", [None, "b0"])
+def test_feature_off_matches_b0_ordering(monkeypatch, flag):
+    """Acceptance criterion 1: with METAREC_PRODUCT_RANKER unset or 'b0', the
+    product output is exactly the pre-WP4 generic ranking — no filtering."""
+    if flag is None:
+        monkeypatch.delenv("METAREC_PRODUCT_RANKER", raising=False)
+    else:
+        monkeypatch.setenv("METAREC_PRODUCT_RANKER", flag)
+
+    for case in load_cases():
+        expected = [
+            it["title"]
+            for it in _rank_items(normalize_tool_items("amazon.product.search", case.pool, "product"))[:10]
+        ]
+        result = asyncio.run(
+            run_generic_domain_graph(
+                query=case.query,
+                domain="product",
+                preferences=case.preferences_with_constraints,
+                tool_tags=PRODUCT_TAGS,
+                adapters=GenericGraphAdapters(tool_registry=_registry_returning(case.pool)),
+            )
+        )
+        assert [it["title"] for it in result.items] == expected, case.id
+        assert result.metadata.get("constraint_filter") is None, case.id
 
 
 @pytest.mark.backend_unit

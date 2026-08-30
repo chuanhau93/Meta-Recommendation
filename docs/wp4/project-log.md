@@ -1,5 +1,28 @@
 # FYP Project Log — Ong Chuan Hau — WP4: Constraint-aware Product Recommendation
 
+Proposal: https://github.com/Hanny658/FYP26-Proposals/tree/main/WP4-product-recommendation
+
+**Models:** B0 = existing generic order (`_item_score`). B1 = classical BM25 +
+calibrated popularity (+ CF) — *not started*. M2 = constraint-aware hybrid: hard
+eligibility gate → relevance + user affinity + calibrated popularity / head-tail.
+Selected at runtime by `METAREC_PRODUCT_RANKER` (default `b0`).
+
+**Deliverables:** D0 audit + B0 repro + constraint/price analysis · D1 frozen
+dataset + data sheet + parser + missingness report · D2 B0/B1 tuning · D3 M2
+ranker (constraints + hybrid scoring + fallback + explanations) · D4 integration
++ flag + strict projection · D5 one-command eval (Recall@10 / NDCG@10 / MRR@10,
+latency p50/p95, per-slice).
+
+**Acceptance:** (1) feature-off == B0 fixtures, offline; (2) zero hard-constraint
+violations on the labelled corpus; (3) M2 NDCG@10 > B0/B1 (≥5% rel. lift);
+(4) complex-query slice improves, head/tail reported; (5) p95 ≤ 25 ms / 100
+candidates, always a valid fallback.
+
+**Progress vs plan (S1):** W1–4 audit → done for the constraint/price/ID axes
+(this log). W5–8 B0/B1 → B0 reproduced, B1 not started. W9–13 M2 → the hard
+eligibility gate (D3, part 1) is built early and behind the flag; hybrid scoring,
+affinity, head/tail, and the NDCG/latency harness remain.
+
 ## Baseline
 
 - **Pinned commit (B0):** `9c093469eb1a9bbf3fb43bff677994ce8facd70e`
@@ -153,9 +176,11 @@ New module `langgraph_metarec/product_constraints.py` (Phase 0's
   brand`); **budget is never auto-relaxed** — an all-over-budget pool returns
   empty + `exhausted`.
 
-Wired into `generic_graph.normalize_and_rank`: for `domain == "product"`,
-filter the ranked candidates before the top-10 cut; record the outcome in
-`metadata["constraint_filter"]`; append an "explained empty" error when
+Wired into `generic_graph.normalize_and_rank`: **only when
+`METAREC_PRODUCT_RANKER` != `b0`** (acceptance criterion 1 — feature-off is
+byte-identical to B0, proven by `test_feature_off_matches_b0_ordering`). Filters
+the ranked candidates before the top-10 cut; records the outcome in
+`metadata["constraint_filter"]`; appends an "explained empty" error when
 exhausted.
 
 **Results — `python -m tests.wp4.eval_constraints`:**
@@ -171,11 +196,21 @@ isolation) + `tests/wp4/test_wp4_baseline.py` (4 acceptance tests through the
 real graph: no leak, no false drops, all-violating → empty, label/checker
 consistency). Full `backend_unit` suite: 607 passed.
 
-**Not yet done (Phase 1b / Phase 2):**
-- Production has no extraction step, so `resolve_constraints` currently always
-  falls to `derive_constraints`. The `hard_constraints` key is populated only by
-  the eval. Phase 1b: LLM/rule extraction in the orchestrator or a graph node.
-- Price-missing items (~1 in 10) are treated as "unknown → allowed". Decide:
-  hide, or surface flagged.
-- Exhausted cases return empty. Phase 2 could show nearest-miss items
-  ("nothing under $500; here are the closest") instead.
+Maps to **D3 part 1** (M2 hard eligibility gate) + the acceptance-2 test
+harness. Still open on the WP4 plan:
+
+- **D1** — formalise the case pool into a frozen snapshot + data sheet +
+  missingness report; add graded relevance judgements (needed for NDCG@10).
+- **D2 / B1** — classical BM25 + calibrated-popularity ranker as the middle
+  baseline.
+- **D3 rest** — hybrid scoring on the survivors (query/use-case + attribute
+  relevance + authenticated-user affinity + calibrated popularity / head-tail),
+  explanations, nearest-miss fallback instead of empty for exhausted pools.
+- **Extraction** — production has no extraction step, so `resolve_constraints`
+  always falls to `derive_constraints`; the `hard_constraints` key is populated
+  only by the eval. Needs an LLM/rule step in the orchestrator or a graph node.
+- **D5** — one-command eval reporting Recall@10 / NDCG@10 / MRR@10, p50/p95
+  latency, per-slice (complex/keyword, cold/warm, budget/brand/model, missing
+  price). Current harness reports violation rate + false-drop only.
+- Price-missing items (~1 in 10) are treated as "unknown → allowed" — confirm
+  this is the intended policy or surface them flagged.

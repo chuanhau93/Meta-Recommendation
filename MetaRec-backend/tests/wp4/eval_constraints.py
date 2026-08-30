@@ -17,6 +17,8 @@ so a drift between the two shows up.
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -201,10 +203,24 @@ class Report:
         return "\n".join(lines)
 
 
+@contextlib.contextmanager
+def _product_ranker(mode: str):
+    old = os.environ.get("METAREC_PRODUCT_RANKER")
+    os.environ["METAREC_PRODUCT_RANKER"] = mode
+    try:
+        yield
+    finally:
+        if old is None:
+            os.environ.pop("METAREC_PRODUCT_RANKER", None)
+        else:
+            os.environ["METAREC_PRODUCT_RANKER"] = old
+
+
 def evaluate() -> Report:
-    """Run every case through the real graph (filter on) and score the output."""
-    cases = load_cases()
-    return Report(cases=[asyncio.run(_run_case(c)) for c in cases])
+    """Run every case through the real graph with the M2 constraint filter on."""
+    with _product_ranker("m2"):
+        cases = load_cases()
+        return Report(cases=[asyncio.run(_run_case(c)) for c in cases])
 
 
 def baseline_leak() -> str:
