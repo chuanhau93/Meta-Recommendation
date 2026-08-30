@@ -62,17 +62,21 @@ how many hard-constraint-violating items survive to `result.items`.
   + `test_no_hard_constraint_violations_surface` (`xfail(strict)`, the WP4
   acceptance target — flips to pass when Phase 1 lands).
 
-**B0 numbers (case_01_keyboard only, dataset still growing):**
+`capture.py` — `python -m tests.wp4.capture "<query>" --pref k=v --out cases/X.json`
+runs the query against the **live** SerpApi adapter and writes a case skeleton;
+fill `hard_constraints` and label every `expect_violations` by hand.
 
-| metric | value |
-|---|---|
-| labeled violators in pool | 3 |
-| violators surfaced by B0 | 3 (100% leak) |
-| first violator rank | 3 (in the top 3) |
+**B0 numbers (dataset still growing):**
 
-Rank-3 leak is the $186 K100 AIR: `_item_score` sorts by (rating, reviews,
-popularity, title), so a well-reviewed 55%-over-budget item outranks 3 of the 4
-compliant options.
+| case | pool violators | surfaced (leak) | first violator rank |
+|---|---|---|---|
+| case_01_keyboard (transcribed) | 3 | 3 (100%) | 3 — top 3 |
+| case_02_keyboard_live (SerpApi) | 3 | 3 (100%) | 4 |
+| **total** | **6** | **6 (100%)** | — |
+
+`_item_score` sorts by (rating, reviews, popularity, title), so a well-reviewed
+over-budget item (K100 AIR at $186; Logitech MX Mechanical at $153 with 2.2k
+reviews) outranks compliant cheaper options. No filter anywhere = 100% leak.
 
 **Findings for Phase 1:**
 - `_amazon_product_search_adapter` (tool_registry.py) captures only
